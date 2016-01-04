@@ -1,4 +1,7 @@
-﻿Public Class Envelope
+﻿Imports System.IO
+Imports System.Runtime.Serialization.Formatters.Binary
+
+Public Class Envelope
     Public Code As String
     Public Name As String
     Public Weight As Integer
@@ -8,6 +11,36 @@
     Public BoxPrice As Single
     Public IndividualPrice As Single
 End Class
+
+Public Class GenericDataController
+
+    Public Sub SaveDataToFile(Filename As String, ObjectToSave As Object, Optional folder As String = Nothing)
+        ' Create file by FileStream class
+        Dim fs As FileStream
+        If IsNothing(folder) Then
+            fs = New FileStream(My.Computer.FileSystem.SpecialDirectories.CurrentUserApplicationData + "\" + Filename + ".dca", FileMode.OpenOrCreate)
+        Else
+            fs = New FileStream(folder + "\" + Filename + ".dca", FileMode.OpenOrCreate)
+        End If
+
+
+        ' Creat binary object
+        Dim bf As New BinaryFormatter()
+
+        ' Serialize object to file
+        Try
+            bf.Serialize(fs, ObjectToSave)
+            fs.Close()
+        Catch ex As Exception
+
+        End Try
+
+    End Sub
+
+
+
+End Class
+
 Public Class Supplier
     Dim DBID As Integer
     Public Code As String
@@ -46,6 +79,7 @@ Public Class Supplier
     Dim ShortSkusAndTotalsWeighted As New ArrayList
 
     Public Sub MakeMixdown()
+        ShortSkusAndTotalsWeighted.Clear()
         Mixdown.Clear()
         For Each child As WhlSKU In Children
             'Search to find the short sku if it's there.
@@ -127,17 +161,35 @@ Public Class SupplierCollection
         End Try
 
     End Sub
-    Public Sub SortItemsBySupplier(Optional sender As Object = Nothing, Optional e As System.ComponentModel.DoWorkEventArgs = Nothing)
+
+    Public StatusString As String = "Downloading Items"
+    Public StatusProgress As Integer
+    Public StatusTotal As Integer
+
+    Public Sub SortItemsBySupplier(Optional sender As Object = Nothing, Optional e As System.ComponentModel.DoWorkEventArgs = Nothing, Optional SkuColl As SkuCollection = Nothing)
+
+        For Each supp As Supplier In Me
+            supp.Children.Clear()
+            supp.Mixdown.Clear()
+        Next
+
         Dim WarningShown As Boolean = False
-        Skus = New SkuCollection
+        If IsNothing(SkuColl) Then
+            Skus = New SkuCollection
+        Else
+            Skus = SkuColl
+        End If
+        StatusTotal = Skus.Count
         Dim prog As Integer = 0
         For Each TempItem As WhlSKU In Skus
             prog = prog + 1
+            StatusString = "Sorting Items (" + prog.ToString + " of " + Skus.Count.ToString + ")"
+            StatusProgress = prog
             Try
                 TempItem.SalesData.DownloadData()
             Catch ex As Exception
                 If Not WarningShown Then
-                    MsgBox("There is some sales data missing for at least one product. You should re-run the sales data compiler for better results.")
+                    MsgBox("There Is some sales data missing For at least one product. You should re-run the sales data compiler For better results.")
 
                     WarningShown = True
                 End If
@@ -152,13 +204,15 @@ Public Class SupplierCollection
                     End If
                 Next
             Next
+            System.Windows.Forms.Application.DoEvents()
 
         Next
 
         'Go through again, find out how many weeks worth of stock we have left. 
+
         For Each supp As Supplier In Me
             supp.MakeMixdown()
-
+            StatusString = "Mixing down for " + supp.Code
             For Each Sku As WhlSKU In supp.Mixdown
                 Sku.CustomData.Clear()
                 Sku.CustomData.Add(supp.RetrieveTheForce(Sku.ShortSku)(1)) 'Add the raw one.
@@ -176,9 +230,10 @@ Public Class SupplierCollection
                 End If
                 Sku.CustomData.Add(weekstock) 'Then add the week one
 
-
+                System.Windows.Forms.Application.DoEvents()
             Next
         Next
+        StatusString = "Finishing Up"
     End Sub
 End Class
 
@@ -245,7 +300,7 @@ Public Class PasswordObj
             Return Websitea
         End Get
         Set(value As String)
-            Website = value
+            Websitea = value
         End Set
     End Property
 

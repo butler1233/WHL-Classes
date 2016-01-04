@@ -34,17 +34,25 @@ Public Class EmpLoginStatus
     Public Sub Update()
         FriendlyText = ""
         Dim Cool As ArrayList = MySql.SelectData("SELECT * FROM whldata.log_loginout WHERE UserId=" + id.ToString + " ORDER BY logid DESC LIMIT 1;")
-        If Cool(0)(4) = "LOGIN" Then
-            LoggedIn = True
-            FriendlyText = "Logged in at " + Cool(0)(3)
-            Computer = Cool(0)(3)
-            Time = Cool(0)(5)
+        If Cool.Count > 0 Then
+            If Cool(0)(4) = "LOGIN" Then
+                LoggedIn = True
+                FriendlyText = "Logged in at " + Cool(0)(3)
+                Computer = Cool(0)(3)
+                Time = Cool(0)(5)
+            Else
+                LoggedIn = False
+                FriendlyText = "Last seen on " + Cool(0)(3) + " at " + Cool(0)(5)
+                Computer = Cool(0)(3)
+                Time = Cool(0)(5)
+            End If
         Else
             LoggedIn = False
-            FriendlyText = "Last seen on " + Cool(0)(3) + " at " + Cool(0)(5)
-            Computer = Cool(0)(3)
-            Time = Cool(0)(5)
+            FriendlyText = "Never logged in."
+            Computer = "None"
+            Time = "Never"
         End If
+
     End Sub
     Public Sub New(PayrollId As Integer)
         id = PayrollId
@@ -130,6 +138,7 @@ Public Class Employee
     End Property
     Public Function SaveData()
         ' ========================================================================================================= SAVE DATA
+        Return True
     End Function
 
 
@@ -166,7 +175,14 @@ Public Class EmployeeAuthCodes
     Dim HolNotifTarget As Boolean           'K
     Dim RotaHistory As Boolean              'L
     Dim ModHolAllowance As Boolean          'M
+    Dim pSaveChangesToSku As Boolean        'D
+    '30/12/2015     Added the following 2 as detailed below. 
+    Dim pResetPin As Boolean                'A
+    Dim pSendBatchMessage As Boolean        'B
 
+
+    '17/12/2015     Added the SaveChangesToSku permission with code "D". Reset Pin and Batch Message sending are yet to be implemented, but are on the
+    '               UAC sheet noted with AW. 
 
     'New constructor
     Public Sub New(Codes As String)
@@ -178,7 +194,44 @@ Public Class EmployeeAuthCodes
         If Codes.Contains("K") Then HolNotifTarget = True
         If Codes.Contains("L") Then RotaHistory = True
         If Codes.Contains("M") Then ModHolAllowance = True
+        If Codes.Contains("D") Then pSaveChangesToSku = True
+
+        '30/12/2015     Added "Reset Pin" and "Send Batch Messages" permissions which have been on the auth sheet for like 2 weeks. 
+        If Codes.Contains("A") Then pResetPin = True
+        If Codes.Contains("B") Then pSendBatchMessage = True
     End Sub
+
+    '30/12/2015     Added the nfollowing 2 properties for the reason detailed just above. 
+
+    'Save changes to SKU data. 
+    Public Property AllowedToResetPin() As Boolean
+        Get
+            Return pResetPin
+        End Get
+        Set(value As Boolean)
+            pResetPin = value
+        End Set
+    End Property
+
+    'Save changes to SKU data. 
+    Public Property CanSendBatchMessages() As Boolean
+        Get
+            Return pSendBatchMessage
+        End Get
+        Set(value As Boolean)
+            pSendBatchMessage = value
+        End Set
+    End Property
+
+    'Save changes to SKU data. 
+    Public Property SaveChangesToSKU() As Boolean
+        Get
+            Return pSaveChangesToSku
+        End Get
+        Set(value As Boolean)
+            pSaveChangesToSku = value
+        End Set
+    End Property
 
     'The employee ID for saving
     Public Property EmployeeId() As Integer
