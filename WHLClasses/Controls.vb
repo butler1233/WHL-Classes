@@ -163,42 +163,7 @@ Namespace Controls
 
         End Sub
     End Class
-    Public Class ShittyTextBoxWithSpellCheckFromWPF
-        Inherits System.Windows.Forms.Integration.ElementHost
 
-        Public Event Enter(ByVal sender As Object, ByVal e As EventArgs)
-        Public Event Leave(ByVal sender As Object, ByVal e As EventArgs)
-        Public Event TextChanged(ByVal sender As Object, ByVal e As EventArgs)
-
-
-        Public Sub New()
-            Child = New SpellcheckTextbox
-            control = Child
-            Width = 130
-            Height = 27
-
-
-            Dim MParent As BPanel = Parent
-            AddHandler control.Enter, AddressOf MParent.ChildHover
-            AddHandler control.Leave, AddressOf MParent.ChildLeave
-            AddHandler control.TextChanged, AddressOf FireTextChanged
-
-        End Sub
-        Dim control As SpellcheckTextbox
-
-        Private Sub FireTextChanged(sender As Object, e As EventArgs)
-            RaiseEvent TextChanged(sender, e)
-        End Sub
-
-        Public Overrides Property Text() As String
-            Get
-                Return control.Text
-            End Get
-            Set(value As String)
-                control.Text = value
-            End Set
-        End Property
-    End Class
 End Namespace
 
 

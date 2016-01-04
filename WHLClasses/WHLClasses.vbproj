@@ -117,9 +117,6 @@
     <Compile Include="WindowsAuthDialog.vb">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="WPFDEath\SpellcheckTextbox.xaml.vb">
-      <DependentUpon>SpellcheckTextbox.xaml</DependentUpon>
-    </Compile>
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Controls.resx">
@@ -166,10 +163,7 @@
     <None Include="Resources\Nouser.png" />
   </ItemGroup>
   <ItemGroup>
-    <Page Include="WPFDEath\SpellcheckTextbox.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
+    <Folder Include="WPFDEath\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.VisualBasic.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
