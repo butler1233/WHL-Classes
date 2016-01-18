@@ -1,5 +1,43 @@
 ﻿Imports System.IO
 Imports System.Runtime.Serialization.Formatters.Binary
+''' <summary>
+''' 06/01/2015 - EnvelopeCollection: A structure which acts as a list of envelope objects and also has some methods for handy enveloping.
+''' </summary>
+Public Class EnvelopeCollection
+    Inherits List(Of Envelope)
+
+    Public Sub New()
+        Dim Envresponse As ArrayList = MySql.SelectData("SELECT * FROM whldata.envelopes")
+        For Each Env As ArrayList In Envresponse
+            Dim newEnv As New Envelope
+            newEnv.Code = Env(0)
+            newEnv.Name = Env(1)
+            newEnv.Weight = Convert.ToInt16(Env(2))
+            If IsDBNull(Env(3)) Then
+                newEnv.Size = "N/A"
+            Else
+                newEnv.Size = Env(3)
+            End If
+            newEnv.Brand = Env(4)
+            newEnv.BoxQuantity = Convert.ToInt32(Env(5))
+            newEnv.BoxPrice = Convert.ToSingle(Env(6))
+            newEnv.IndividualPrice = Convert.ToSingle(Env(7))
+            Me.Add(newEnv)
+        Next
+    End Sub
+
+    Public Function GetEnvelope(Search As String) As Envelope
+        Search = Search.Replace("  ", " ")
+        For Each env As Envelope In Me
+
+            If env.Name.Contains(Search) Then
+                Return env
+            End If
+        Next
+        Return Nothing
+    End Function
+
+End Class
 
 Public Class Envelope
     Public Code As String
@@ -20,7 +58,7 @@ Public Class GenericDataController
         If IsNothing(folder) Then
             fs = New FileStream(My.Computer.FileSystem.SpecialDirectories.CurrentUserApplicationData + "\" + Filename + ".dca", FileMode.OpenOrCreate)
         Else
-            fs = New FileStream(folder + "\" + Filename + ".dca", FileMode.OpenOrCreate)
+            fs = New FileStream(folder + "\" + Filename, FileMode.OpenOrCreate)
         End If
 
 
@@ -37,6 +75,14 @@ Public Class GenericDataController
 
     End Sub
 
+    Public Function LoadSKUFile(Filepath As String) As WhlSKU
+        Dim bf As New BinaryFormatter()
+        ' Open file and deserialize to object again
+        Dim fsRead As New FileStream(Filepath, FileMode.Open)
+        Dim Cool As WhlSKU = bf.Deserialize(fsRead)
+        fsRead.Close()
+        Return Cool
+    End Function
 
 
 End Class
@@ -151,7 +197,7 @@ Public Class SupplierCollection
 
     Public Sub New()
         'Get the suppliers data.
-        Dim Data As Object = MySql.SelectData("SELECT * FROM whldata.suppliers")
+        Dim Data As Object = MySql.SelectData("SELECT * FROM whldata.suppliers ORDER BY suppname ASC")
         Try
             For Each Supp As ArrayList In Data
                 Add(New Supplier(Supp))

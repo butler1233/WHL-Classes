@@ -50,7 +50,21 @@ Public Class SkuCollection
                 End If
             Next
         Next
-            Return returningList
+        Return DupeFilter(returningList)
+    End Function
+
+    Public Function DupeFilter(InitColl As SkuCollection) As SkuCollection
+        Dim SKUList As New List(Of String)
+        Dim ReturnColl As New SkuCollection(True)
+        For Each sku As WhlSKU In InitColl
+            If SKUList.Contains(sku.SKU) Then
+                'SKIP
+            Else
+                SKUList.Add(sku.SKU)
+                ReturnColl.Add(sku)
+            End If
+        Next
+        Return ReturnColl
     End Function
 
     Public CountDone As String = ""
@@ -73,6 +87,7 @@ Public Class SkuCollection
     End Function
 
 End Class
+
 
 Public Class SkusDataController
     Public Sub SaveData(Collection As SkuCollection)
@@ -101,6 +116,18 @@ End Class
 
 <System.Serializable()>
 Public Class WhlSKU
+
+    Public Sub IncludeImages()
+        For Each imageitem As SKUImage In Images
+            Try
+                imageitem.ImageData = System.Drawing.Image.FromFile(imageitem.ImagePath)
+            Catch ex As Exception
+
+            End Try
+
+        Next
+    End Sub
+
     ''' <summary>
     ''' This function will save all properties to the database.
     ''' </summary>
@@ -108,18 +135,25 @@ Public Class WhlSKU
     Public Function SaveChanges(LogUser As Employee, Optional LogReason As String = "None provided") As List(Of String)
 
         Dim SaveStatuses As New List(Of String)
+
+
         '============================================================================ Aww shit here we go...
+        '14/01/2016     Added distinguish (ext35) to teh save, and load functions. 
+        '15/01/2016     Added Inner (New_inner, 117), InitStock(initialquantity, 38), InitLevel(initiallevel, 39), InitMinimum(120), ListPriority(121), and
+        '               IsListed(122) to save and load. 
         Dim WhlNewQuery As String
         WhlNewQuery = "REPLACE INTO whldata.whlnew (sku, itemtitle, net, gross, retail, profit, margin, envelope, weight, packsize, labour, courier, deliverynote, packingcost," _
             + " postagecost, envcost, feescost, labourcost, vatcost, totalcost, parts, screws, ext33, shortsku, gs1, labelshort, linnshort," _
-            + " New_Brand, New_Description, New_Finish, New_Size, New_Note, New_TransferBox, New_Status, IsPair) VALUES" _
+            + " New_Brand, New_Description, New_Finish, New_Size, New_Note, New_TransferBox, New_Status, IsPair, ext35, New_Inner, initialquantity, initiallevel, InitMinimum, ListPriority, IsListed) VALUES" _
             + " ('" + SKU.ToString + "','" + Title.Invoice.ToString + "','" + Price.Net.ToString + "','" + Price.Gross.ToString + "','" + Price.Retail.ToString + "','" + Price.Profit.ToString + "','" _
             + Price.Margin.ToString + "','" + ExtendedProperties.Envelope.ToString + "','" + Profile.Weight.ToString + "','" + PackSize.ToString + "','" + ExtendedProperties.LabourCode.ToString _
             + "','" + ExtendedProperties.NeedsCourier.ToString + "','" + DeliveryNote.ToString + "','" + Costs.Packing.ToString + "','" + Costs.Postage.ToString + "','" + Costs.Envelope.ToString _
             + "','" + Costs.Fees.ToString + "','" + Costs.Labour.ToString + "','" + Costs.VAT.ToString + "','" + Costs.Total.ToString + "','" + ExtendedProperties.Parts.ToString + "','" _
             + ExtendedProperties.Screws.ToString + "','" + Category.ToString + "','" + ShortSku.ToString + "','" + ExtendedProperties.GS1Barcode.ToString + "','" + Title.Label.ToString + "','" _
             + Title.Linnworks.ToString + "','" + NewItem.Brand.ToString + "','" + NewItem.Description.ToString + "','" + NewItem.Finish.ToString + "','" + NewItem.Size.ToString + "','" _
-            + NewItem.Note.ToString + "','" + NewItem.Box.ToString + "','" + NewItem.Status.ToString + "','" + ExtendedProperties.IsPair.ToString + "');"
+            + NewItem.Note.ToString + "','" + NewItem.Box.ToString + "','" + NewItem.Status.ToString + "','" + ExtendedProperties.IsPair.ToString + "','" + Title.Distinguish.ToString + "','" _
+            + ExtendedProperties.Inner.ToString + "','" + NewItem.InitStock.ToString + "','" + NewItem.InitLevel.ToString + "','" + NewItem.InitMinimum.ToString + "','" + NewItem.ListPriority.ToString + "','" _
+            + NewItem.IsListed.ToString + "');"
         Dim Response As Object = MySql.insertupdate(WhlNewQuery)
         If Response.ToString.Length < 10 Then
             SaveStatuses.Add("Main Data saved successfully.")
@@ -339,6 +373,16 @@ Public Class WhlSKU
                 Title.NewItem = Data(101)
             Catch ex As Exception
                 Title.NewItem = ""
+            End Try
+        End If
+        '14/01/2016     Added distinguish to teh save, and load functions. 
+        If IsDBNull(Data(79)) Then
+            Title.Distinguish = ""
+        Else
+            Try
+                Title.Distinguish = Data(101)
+            Catch ex As Exception
+                Title.Distinguish = ""
             End Try
         End If
 
@@ -691,6 +735,29 @@ Public Class WhlSKU
             Changelog.Add(NewChange)
         Next
 
+        '15/01/2016     Adding NewItem Fields (InitStock, InitLevel, InitMinimum, ListPriority, Islisted) and Inner field in ExtendedProperties. 
+        '            ...Apparently InitStock has already been added on 21/12/2015. Adding the others insread. 
+        Try
+            If IsDBNull(Data(39)) Then NewItem.InitLevel = 0 Else NewItem.InitLevel = Convert.ToInt32(Data(39))
+        Catch ex As Exception
+            NewItem.InitLevel = 0
+        End Try
+        Try
+            If IsDBNull(Data(120)) Then NewItem.InitMinimum = 0 Else NewItem.InitMinimum = Convert.ToInt32(Data(120))
+        Catch ex As Exception
+            NewItem.InitMinimum = 0
+        End Try
+        Try
+            If IsDBNull(Data(121)) Then NewItem.ListPriority = 0 Else NewItem.ListPriority = Convert.ToInt32(Data(121))
+        Catch ex As Exception
+            NewItem.ListPriority = 0
+        End Try
+        Try
+            If IsDBNull(Data(122)) Then NewItem.IsListed = False Else NewItem.IsListed = Convert.ToBoolean(Data(122))
+        Catch ex As Exception
+            NewItem.InitStock = False
+        End Try
+
     End Sub
     Public Function SearchSupplierByCode(Code As String) As SKUSupplier
         For Each supp As SKUSupplier In Suppliers
@@ -831,6 +898,7 @@ Public Class SKUExtended
         LabourCode = ""
         NeedsCourier = False
         IsPair = False
+        Inner = ""
     End Sub
 
     Public Parts As Integer
@@ -841,6 +909,7 @@ Public Class SKUExtended
     Public LabourCode As String
     Public NeedsCourier As Boolean
     Public IsPair As Boolean
+    Public Inner As String
 End Class
 <System.Serializable()>
 Public Class SKUProfile
@@ -873,6 +942,8 @@ Public Class SKUNewItem
     Public InitStock As Integer = 0
     Public InitLevel As Integer = 0
     Public InitMinimum As Integer = 0
+    Public ListPriority As Integer = 1
+    Public IsListed As Boolean = True
 
 End Class
 <System.Serializable()>
@@ -1143,18 +1214,20 @@ Public Class SKUTitles
         Label = ""
         Linnworks = ""
         NewItem = ""
+        Distinguish = ""
 
     End Sub
     Public Invoice As String
     Public Label As String
     Public Linnworks As String
     Public NewItem As String
+    Public Distinguish As String
 End Class
 <System.Serializable()>
 Public Class SKUImage
     Public ImagePath As String
     Public FullImagePath As String
-    Public ImageData As System.Drawing.Image
+    Public ImageData As System.Drawing.Image = Nothing
     Public ImageId As String
 
 End Class

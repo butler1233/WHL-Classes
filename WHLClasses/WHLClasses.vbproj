@@ -91,6 +91,7 @@
     </Compile>
     <Compile Include="Employees.vb" />
     <Compile Include="Exceptions.vb" />
+    <Compile Include="Fees.vb" />
     <Compile Include="Labels.vb" />
     <Compile Include="Misc.vb" />
     <Compile Include="Mysql.vb" />
