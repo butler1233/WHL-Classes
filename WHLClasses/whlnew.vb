@@ -128,6 +128,32 @@ Public Class WhlSKU
         Next
     End Sub
 
+    '18/01/2016     Added cost recalculation to whlsku inline, but added it as a Public sub so recalculation can be done later. This might be an awful idea. We'll try it.
+    Public Function RecalculateCosts(Envelope As String, RetailPrice As Single) As Single
+        Dim Envman As New EnvelopeCollection
+        Dim Env As Envelope = Envman.GetEnvelope(Envelope)
+        Dim Feeman As New Fees.FeeManager
+        Dim Ispacket As Boolean = Envelope.StartsWith("P")
+        If Not IsNothing(Env) Then
+            Costs.Envelope = Feeman.GetEnvelopePrice(Env, True)
+            Costs.Postage = Feeman.GetPostagePrice(Profile.Weight, Ispacket, ExtendedProperties.NeedsCourier)
+        Else
+            Costs.Envelope = 0
+            Costs.Postage = 0
+        End If
+
+
+
+        Costs.Packing = Costs.Postage + Costs.Envelope
+            Costs.Fees = Feeman.GetListingFees(RetailPrice)
+            Costs.Labour = Feeman.GetLabourPrice(ExtendedProperties.LabourCode)
+            Costs.VAT = Feeman.GetVATCost(RetailPrice)
+            Costs.Total = Costs.Packing + Costs.Fees + Costs.Labour + Costs.VAT
+
+
+            Return Costs.Total
+
+    End Function
     ''' <summary>
     ''' This function will save all properties to the database.
     ''' </summary>
@@ -142,8 +168,8 @@ Public Class WhlSKU
         '15/01/2016     Added Inner (New_inner, 117), InitStock(initialquantity, 38), InitLevel(initiallevel, 39), InitMinimum(120), ListPriority(121), and
         '               IsListed(122) to save and load. 
         Dim WhlNewQuery As String
-        WhlNewQuery = "REPLACE INTO whldata.whlnew (sku, itemtitle, net, gross, retail, profit, margin, envelope, weight, packsize, labour, courier, deliverynote, packingcost," _
-            + " postagecost, envcost, feescost, labourcost, vatcost, totalcost, parts, screws, ext33, shortsku, gs1, labelshort, linnshort," _
+        WhlNewQuery = "REPLACE INTO whldata.whlnew (sku, itemtitle, Net, gross, retail, profit, margin, Envelope, weight, PackSize, labour, courier, DeliveryNote, packingcost, " _
+            + " postagecost, envcost, feescost, labourcost, vatcost, totalcost, parts, screws, ext33, ShortSku, gs1, labelshort, linnshort, " _
             + " New_Brand, New_Description, New_Finish, New_Size, New_Note, New_TransferBox, New_Status, IsPair, ext35, New_Inner, initialquantity, initiallevel, InitMinimum, ListPriority, IsListed) VALUES" _
             + " ('" + SKU.ToString + "','" + Title.Invoice.ToString + "','" + Price.Net.ToString + "','" + Price.Gross.ToString + "','" + Price.Retail.ToString + "','" + Price.Profit.ToString + "','" _
             + Price.Margin.ToString + "','" + ExtendedProperties.Envelope.ToString + "','" + Profile.Weight.ToString + "','" + PackSize.ToString + "','" + ExtendedProperties.LabourCode.ToString _
@@ -685,8 +711,9 @@ Public Class WhlSKU
         Catch ex As Exception
             ExtendedProperties.IsPair = False
         End Try
+        '18/01/2016     Modified the courier detection because it was wrong. Checked for "True", but it's actually Y or y in older formats. 
         Try
-            If Data(18) = "True" Then ExtendedProperties.NeedsCourier = True Else ExtendedProperties.NeedsCourier = False
+            If (Data(18) = "True") Or (Data(18).ToString.ToLower = "y") Then ExtendedProperties.NeedsCourier = True Else ExtendedProperties.NeedsCourier = False
         Catch ex As Exception
             ExtendedProperties.NeedsCourier = False
         End Try
@@ -757,6 +784,19 @@ Public Class WhlSKU
         Catch ex As Exception
             NewItem.InitStock = False
         End Try
+
+        '18/01/2016     (Possibly temporary) Added fee recalc inline so it's fresh. See how badly it impacts loading speed. Yay timers. 
+        '19/01/2016     Results on times with this added: 
+        '               Time With Recalc on Dev PC:     4min 55.26sec   (295 sec)
+        '               Time Without recalc on Dev PC:  2min 24.44sec   (144 sec)
+        '               Recalc time difference: 105% slower.
+        '               Ouch. 
+        Try
+            RecalculateCosts(ExtendedProperties.Envelope, Price.Retail)
+        Catch ex As Exception
+
+        End Try
+
 
     End Sub
     Public Function SearchSupplierByCode(Code As String) As SKUSupplier

@@ -26,11 +26,11 @@ Public Class EnvelopeCollection
         Next
     End Sub
 
-    Public Function GetEnvelope(Search As String) As Envelope
+    Public Function GetEnvelope(Search As String, Optional NullIt As Boolean = False) As Envelope
         Search = Search.Replace("  ", " ")
         For Each env As Envelope In Me
 
-            If env.Name.Contains(Search) Then
+            If env.Name.Contains(Search) And ((Not NullIt = True) And (Not env.Code = "x")) Then
                 Return env
             End If
         Next
