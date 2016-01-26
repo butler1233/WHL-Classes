@@ -50,5 +50,19 @@
         End Sub
     End Class
 
+    Public Class NoEnvelopeException
+        Inherits Exception
+
+        Public Sub New(Message)
+            MyBase.New(Message)
+        End Sub
+    End Class
+
+    Public Class NoGS1Exception
+        Inherits Exception
+        Public Sub New(Message)
+            MyBase.New(Message)
+        End Sub
+    End Class
 
 End Namespace

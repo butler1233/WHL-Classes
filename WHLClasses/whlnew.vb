@@ -13,6 +13,9 @@ Public Class SkuCollection
     Public Progress As Integer = 0
     Public Total As Integer = 0
 
+
+    '22/01/2016     This function gets the total stock values of everything in the collection. 
+
     Public Function GetItemsInBox(Box As Integer) As SkuCollection
         Dim ReturningList As New SkuCollection(True)
         For Each sku As WhlSKU In Me
@@ -40,15 +43,106 @@ Public Class SkuCollection
 
     End Function
 
+
+    '25/01/2016     Advanced Search. I have literally no idea how this is going to turn out. 
+    ''' <summary>
+    ''' This funciton does some clever searching. It also probably takes a while because it does a lot of searches and comparisons. RIP IN PIECES CPU.
+    ''' </summary>
+    ''' <param name="Terms">The standard search terms. Enter a nothing value to return everything. </param>
+    ''' <param name="Category">Limit the search to a category. Defaults to nothiong. </param>
+    ''' <param name="PrimarySupplierName">Limit the search to a supplier. Defaults to nothing. </param>
+    ''' <param name="MatchAll">Boolean value to make the results match all search terms. Defaults to True. </param>
+    ''' <param name="Divider">Set the search term divider. Default is space. </param>
+    ''' <returns>A collection of SKUs (in a skucollection) which meets the specified criteria. </returns>
+    Public Function AdvancedSearch(Terms As String, Optional Category As String = Nothing, Optional PrimarySupplierName As String = Nothing, Optional MatchAll As Boolean = True, Optional Divider As String = " ") As SkuCollection
+        Dim SearchTerms As List(Of String) = Terms.Split(Divider).ToList
+        Dim SearchResults As New List(Of SkuCollection)
+        'Get each set of search results. 
+        For Each SearchTerm As String In SearchTerms
+            SearchResults.Add(SearchSKUS(SearchTerm))
+        Next
+        'And now we can sort them. 
+        Dim FitsMatchall As New SkuCollection(True)
+
+        'Checking for match alls. 
+        If MatchAll Then
+            For Each item As WhlSKU In SearchResults(0)
+                Dim Contained As Boolean = True
+                For Each ResultsColl As SkuCollection In SearchResults
+                    If Not ResultsColl.Contains(item) And Contained = True Then
+                        Contained = False
+                    End If
+
+                Next
+                If Contained Then
+                    FitsMatchall.Add(item)
+                End If
+            Next
+
+        Else
+            For Each Coll As SkuCollection In SearchResults
+                For Each Item As WhlSKU In Coll
+                    If Not FitsMatchall.Contains(Item) Then
+                        FitsMatchall.Add(Item)
+                    End If
+                Next
+            Next
+        End If
+        'By now, anything which doesn't match all terms should be gone. If we asked for matchall. Otherwise everything should be in fitsmatchall. 
+        Dim FitsCategory As New SkuCollection(True)
+        If Not IsNothing(Category) Then
+            For Each Item As WhlSKU In FitsMatchall
+                If Item.Category.ToLower = Category.ToLower Then
+                    FitsCategory.Add(Item)
+                End If
+            Next
+        Else
+            For Each Item As WhlSKU In FitsMatchall
+                FitsCategory.Add(Item)
+            Next
+        End If
+        'This next bit weeds out anything which doens't match the supplier. 
+        Dim FitsSupplier As New SkuCollection(True)
+        If Not IsNothing(PrimarySupplierName) Then
+            For Each Item As WhlSKU In FitsCategory
+                If Item.GetPrimarySupplier().Name.ToLower = PrimarySupplierName.ToLower Then
+                    FitsSupplier.Add(Item)
+                End If
+            Next
+        Else
+            For Each Item As WhlSKU In FitsCategory
+                FitsSupplier.Add(Item)
+            Next
+        End If
+        'Weed out any nulls. 
+        Dim Returnable As New SkuCollection(True)
+        For Each item As WhlSKU In FitsSupplier
+            If Not IsNothing(item) Then
+                Returnable.add(item)
+            End If
+        Next
+
+        'Finally, we're done. Dedupe for good measure. 
+        Return DupeFilter(Returnable)
+    End Function
+
+
+
+
     Public Function SearchSKUS(SearchTerm As String) As SkuCollection
         Dim returningList As New SkuCollection(True)
         For Each SKU As WhlSKU In Me
+            '21/01/2016     Add this loop as a try, because the removal of a keyword in forking can break it. 
+            Try
+                For Each searchy As String In SKU.SearchKeywords
+                    If searchy.ToLower.Contains(SearchTerm.ToLower) Then
+                        returningList.Add(SKU)
+                    End If
+                Next
+            Catch ex As Exception
 
-            For Each searchy As String In SKU.SearchKeywords
-                If searchy.ToLower.Contains(SearchTerm.ToLower) Then
-                    returningList.Add(SKU)
-                End If
-            Next
+            End Try
+
         Next
         Return DupeFilter(returningList)
     End Function
@@ -128,15 +222,89 @@ Public Class WhlSKU
         Next
     End Sub
 
+    '20/01/2016     How the hell don't we have a fucntion for this until now???? Well now we do. Does what it says on the tin - Gets the primary supplier. 
+    Public Function GetPrimarySupplier() As SKUSupplier
+        For Each supp As SKUSupplier In Suppliers
+            If supp.Primary Then
+                Return supp
+            End If
+        Next
+        Return Nothing
+    End Function
+
+    '20/01/2016     Recalculates all of the current prices. Uses the price of the primary supplier * packsize as the net. 
+    Public Sub RecalculatePrices(Retail As Single)
+        Price.Retail = Retail
+        Try
+            Price.Net = GetPrimarySupplier().Price * PackSize
+        Catch ex As Exception
+            'Can't get the price for some reason. Ah well, just use the one we have.
+        End Try
+        RecalculateCosts()
+        Price.Profit = Price.Retail - Costs.Total - Price.Net
+        '20/01/2016     Added conditional margin calc so it supports negative margins. 
+        If Price.Profit < 0 Then 'Negative margin
+            Price.Margin = 0
+        Else
+            Price.Margin = ((Price.Retail - Costs.Total) / Price.Net) - 1 'Normal method
+        End If
+
+        Price.Gross = Price.Net + Costs.VAT
+    End Sub
+
+    '21/01/2016     ShittyClone: Serialises the object, saves it, loads it and then unserailises it, then returns it. LOL it's shit. 
+    Private Function ShittyClone() As WhlSKU
+        Dim DataController As New GenericDataController
+        Dim folder As String = My.Computer.FileSystem.SpecialDirectories.CurrentUserApplicationData
+        Dim file As String = "temp.bin"
+
+        Dim Filename As String = folder + "\" + file
+        DataController.SaveDataToFile(file, Me, folder)
+        Return DataController.LoadSKUFile(Filename)
+    End Function
+
+    '21/01/2016     Added to facilitiate forking items for new packsizes by getting the current, making applicable changes and then returning the new one for addition to the 
+    '               original collection, and also for later saving and modification. 
+    Public Function ForkSkuPackSize(NewPackSize As Integer) As WhlSKU
+        Dim ReturnMe As WhlSKU = ShittyClone()
+        ReturnMe.SKU = ShortSku + NewPackSize.ToString.PadLeft(4, "0")
+        ReturnMe.PackSize = NewPackSize
+        If PackSize = 0 Then
+            ReturnMe.Profile.Weight = Profile.Weight * NewPackSize
+        Else
+            ReturnMe.Profile.Weight = Profile.Weight * (NewPackSize / PackSize)
+        End If
+
+        ReturnMe.Price.Retail = 10
+
+        ReturnMe.SearchKeywords.Remove(SKU)
+        ReturnMe.SearchKeywords.Remove(ExtendedProperties.GS1Barcode)
+        ReturnMe.SearchKeywords.Add(ReturnMe.SKU)
+        ReturnMe.ExtendedProperties.GS1Barcode = ""
+        ReturnMe.ExtendedProperties.Envelope = "POB - Packet In Own Box"
+
+        '21/01/2016     Crashes if too heavy, so check if it needs couriering, and if it does then we can activate courier. We're just going to say above 2.5kg because screw variables. 
+        If ReturnMe.Profile.Weight > 2500 Then
+            'Activate courier
+            ReturnMe.ExtendedProperties.NeedsCourier = True
+        End If
+
+        ReturnMe.RecalculatePrices(10)
+        Return ReturnMe
+    End Function
+
     '18/01/2016     Added cost recalculation to whlsku inline, but added it as a Public sub so recalculation can be done later. This might be an awful idea. We'll try it.
-    Public Function RecalculateCosts(Envelope As String, RetailPrice As Single) As Single
+    Public Function RecalculateCosts() As Single
+        Dim Envelopae As String = ExtendedProperties.Envelope
+        Dim Retailprice As Single = Price.Retail
         Dim Envman As New EnvelopeCollection
-        Dim Env As Envelope = Envman.GetEnvelope(Envelope)
+        Dim Env As Envelope = Envman.GetEnvelope(Envelopae, True)
+        Envelope = Env
         Dim Feeman As New Fees.FeeManager
-        Dim Ispacket As Boolean = Envelope.StartsWith("P")
+        Dim Ispacket As Boolean = Envelopae.StartsWith("P")
         If Not IsNothing(Env) Then
-            Costs.Envelope = Feeman.GetEnvelopePrice(Env, True)
-            Costs.Postage = Feeman.GetPostagePrice(Profile.Weight, Ispacket, ExtendedProperties.NeedsCourier)
+            Costs.Envelope = Feeman.GetEnvelopePrice(Env)
+            Costs.Postage = Feeman.GetPostagePrice(Profile.Weight + Env.Weight, Ispacket, ExtendedProperties.NeedsCourier)
         Else
             Costs.Envelope = 0
             Costs.Postage = 0
@@ -145,13 +313,13 @@ Public Class WhlSKU
 
 
         Costs.Packing = Costs.Postage + Costs.Envelope
-            Costs.Fees = Feeman.GetListingFees(RetailPrice)
-            Costs.Labour = Feeman.GetLabourPrice(ExtendedProperties.LabourCode)
-            Costs.VAT = Feeman.GetVATCost(RetailPrice)
-            Costs.Total = Costs.Packing + Costs.Fees + Costs.Labour + Costs.VAT
+        Costs.Fees = Feeman.GetListingFees(Retailprice)
+        Costs.Labour = Feeman.GetLabourPrice(ExtendedProperties.LabourCode)
+        Costs.VAT = Feeman.GetVATCost(Retailprice)
+        Costs.Total = Costs.Packing + Costs.Fees + Costs.Labour + Costs.VAT
 
 
-            Return Costs.Total
+        Return Costs.Total
 
     End Function
     ''' <summary>
@@ -189,13 +357,14 @@ Public Class WhlSKU
 
         'Now we save the locaitons to the locations table.
         For Each location As SKULocation In Locations
+            '21/01/2016     Updated to save per SKU instead of per ShortSku.
             Dim locationsquery As String
             If location.LocationTableID = 0 Then
                 'Doesn't already exist in the table
-                locationsquery = "INSERT INTO whldata.sku_locations (shelfName, Sku, additionalInfo) VALUES ('" + location.LocalLocationName.ToString + "','" + ShortSku.ToString + "','" + " " + "')"
+                locationsquery = "INSERT INTO whldata.sku_locations (shelfName, Sku, additionalInfo) VALUES ('" + location.LocalLocationName.ToString + "','" + SKU.ToString + "','" + " " + "')"
             Else
                 'Already exists and just needs updating
-                locationsquery = "REPLACE INTO whldata.sku_locations (id, shelfName, Sku, additionalInfo) VALUES (" + location.LocationTableID.ToString + ",'" + location.LocalLocationName.ToString + "','" + ShortSku.ToString + "','" + " " + "')"
+                locationsquery = "REPLACE INTO whldata.sku_locations (id, shelfName, Sku, additionalInfo) VALUES (" + location.LocationTableID.ToString + ",'" + location.LocalLocationName.ToString + "','" + SKU.ToString + "','" + " " + "')"
             End If
 
             Dim response1 As Object = MySql.insertupdate(locationsquery)
@@ -212,21 +381,12 @@ Public Class WhlSKU
             If supplier.LastModified.Contains("Old Type") Then
                 supplier.LastModified = Now.ToString("dd/MM/yyyy HH:mm:ss")
             End If
-            If IsNothing(supplier.TableDataId) Then
-                'Doesn't already exist in the table
-                suppquery = "INSERT INTO whldata.sku_supplierdata (SKU, SupplierName, SupplierCode, SupplierBarcode, SupplierCaseBarcode, SupplierPricePer, " _
-                + "isPrimary, isDiscontinued, isOutOfStock, DateModified, LeadTimeWeeks, SupplierCaseInnerBarcode, SupplierBoxCode) VALUES ('" _
+            '25/01/2016     Dues to able restructuring to eliminate suppdata duplication, this has been changed to use the new key "SkuSuppKey", a concat of SKU_SuppName.
+            suppquery = "REPLACE INTO whldata.sku_supplierdata (SkuSuppKey,SKU,SupplierName, SupplierCode, SupplierBarcode, SupplierCaseBarcode, SupplierPricePer, " _
+                + "isPrimary, isDiscontinued, isOutOfStock, DateModified, LeadTimeWeeks, SupplierCaseInnerBarcode, SupplierBoxCode) VALUES ('" + supplier.TableDataId.ToString + "','" _
                 + ShortSku.ToString + "','" + supplier.Name.ToString + "','" + supplier.ReOrderCode.ToString + "','" + supplier.Barcode.ToString + "','" + supplier.CaseBarcode.ToString _
                 + "','" + supplier.Price.ToString + "','" + supplier.Primary.ToString + "','" + supplier.Discontinued.ToString + "','" + supplier.OutOfStock.ToString + "','" +
                 supplier.LastModified.ToString + "','" + supplier.LeadTime.ToString + "','" + supplier.CaseBarcodeInner.ToString + "','" + supplier.BoxCode.ToString + "')"
-            Else
-                'Already exists and just needs updating
-                suppquery = "REPLACE INTO whldata.sku_supplierdata (DataId,SKU,SupplierName, SupplierCode, SupplierBarcode, SupplierCaseBarcode, SupplierPricePer, " _
-                + "isPrimary, isDiscontinued, isOutOfStock, DateModified, LeadTimeWeeks, SupplierCaseInnerBarcode, SupplierBoxCode) VALUES (" + supplier.TableDataId.ToString + ",'" _
-                + ShortSku.ToString + "','" + supplier.Name.ToString + "','" + supplier.ReOrderCode.ToString + "','" + supplier.Barcode.ToString + "','" + supplier.CaseBarcode.ToString _
-                + "','" + supplier.Price.ToString + "','" + supplier.Primary.ToString + "','" + supplier.Discontinued.ToString + "','" + supplier.OutOfStock.ToString + "','" +
-                supplier.LastModified.ToString + "','" + supplier.LeadTime.ToString + "','" + supplier.CaseBarcodeInner.ToString + "','" + supplier.BoxCode.ToString + "')"
-            End If
 
             Dim response1 As Object = MySql.insertupdate(suppquery)
             If response1.ToString.Length < 10 Then
@@ -241,10 +401,10 @@ Public Class WhlSKU
             Dim imgquery As String = ""
             If IsNothing(img.ImageId) Then
                 'Needs adding, doesn't already exist.
-                imgquery = "INSERT INTO whldata.sku_images (Path, Sku, ShortSku) VALUES ('" + img.ImagePath + "', '" + SKU + "','" + ShortSku + "');"
+                imgquery = "INSERT INTO whldata.sku_images (Path, Sku, ShortSku) VALUES ('" + img.ImagePath.Replace("\", "\\") + "', '" + SKU + "','" + ShortSku + "');"
             Else
                 'Already exist, jus needs updating.
-                imgquery = "REPLACE INTO whldata.sku_images (imageId,Path, Sku, ShortSku) VALUES (" + img.ImageId.ToString + ",'" + img.ImagePath + "', '" + SKU + "','" + ShortSku + "');"
+                imgquery = "REPLACE INTO whldata.sku_images (imageId,Path, Sku, ShortSku) VALUES (" + img.ImageId.ToString + ",'" + img.ImagePath.Replace("\", "\\") + "', '" + SKU + "','" + ShortSku + "');"
             End If
             Dim response1 As Object = MySql.insertupdate(imgquery)
             If response1.ToString.Length < 10 Then
@@ -272,7 +432,7 @@ Public Class WhlSKU
 
         '17/12/15: Added save changelogging, and added the parameters of the method to allow passing change reasons and users. 
         Dim ChangesQuery As String = ""
-        ChangesQuery = MySql.insertupdate("INSERT INTO whldata.sku_changelog (shortsku, payrollId, reason, datetimechanged) VALUES ('" + ShortSku + "','" + LogUser.PayrollId.ToString + "','" + LogReason + "','" + Now.ToString("dd/MM/yyyy HH:mm:ss") + "');")
+        ChangesQuery = "INSERT INTO whldata.sku_changelog (shortsku, payrollId, reason, datetimechanged) VALUES ('" + ShortSku + "','" + LogUser.PayrollId.ToString + "','" + LogReason + "','" + Now.ToString("dd/MM/yyyy HH:mm:ss") + "');"
         Dim response3 As Object = MySql.insertupdate(ChangesQuery)
         If response3.ToString.Length < 10 Then
             SaveStatuses.Add("Changelog for '" + ShortSku + "' saved successfully.")
@@ -310,6 +470,8 @@ Public Class WhlSKU
         Next
         Return cheapest
     End Function
+
+    '               Creates the record of data.
     Public Sub Newbie(Data As ArrayList)
 
         'Initialate
@@ -452,7 +614,6 @@ Public Class WhlSKU
 
 
 
-
         'Suppliers
         Dim NewSupplierTable As Object = MySql.SelectData("SELECT * FROM whldata.sku_supplierdata WHERE SKU='" + ShortSku + "';")
         Try
@@ -485,7 +646,8 @@ Public Class WhlSKU
                     NewSupp.LeadTime = Supp(12)
                     NewSupp.Price = Supp(7)
                     NewSupp.LastModified = Supp(11)
-                    NewSupp.TableDataId = Supp(0)
+                    '25/01/2016     Changed the TableDataID code for the new Pkey. 
+                    NewSupp.TableDataId = ShortSku + "_" + NewSupp.Name
                     NewSupp.CaseBarcodeInner = Supp(13)
                     'NewSupp.BoxCode = Supp(14)     Looks obselete to me. 
                     Suppliers.Add(NewSupp)
@@ -504,10 +666,12 @@ Public Class WhlSKU
                 NewSupp.CaseBarcode = Data(22)
                 NewSupp.LeadTime = 4
                 NewSupp.Primary = True
-                NewSupp.Price = Price.Net
+                NewSupp.Price = Price.Net / PackSize
                 NewSupp.LastModified = "Old Type- Not Found"
                 NewSupp.CaseBarcodeInner = ""
                 NewSupp.BoxCode = ""
+                '25/01/2016     Added the TableDataID code for the new Pkey. 
+                NewSupp.TableDataId = ShortSku + "_" + NewSupp.Name
                 Suppliers.Add(NewSupp)
             End If
             If Data(23).ToString.Length > 0 Then
@@ -517,10 +681,12 @@ Public Class WhlSKU
                 NewSupp.Barcode = Data(25)
                 NewSupp.CaseBarcode = Data(26)
                 NewSupp.LeadTime = Data(58)
-                NewSupp.Price = Price.Net
+                NewSupp.Price = Price.Net / PackSize
                 NewSupp.LastModified = "Old Type- Not Found"
                 NewSupp.CaseBarcodeInner = ""
                 NewSupp.BoxCode = ""
+                '25/01/2016     Added the TableDataID code for the new Pkey. 
+                NewSupp.TableDataId = ShortSku + "_" + NewSupp.Name
                 Suppliers.Add(NewSupp)
             End If
             If Data(27).ToString.Length > 0 Then
@@ -538,17 +704,19 @@ Public Class WhlSKU
                     NewSupp.CaseBarcode = ""
                 End Try
                 NewSupp.LeadTime = Data(58)
-                NewSupp.Price = Price.Net
+                NewSupp.Price = Price.Net / PackSize
                 NewSupp.LastModified = "Old Type- Not Found"
                 NewSupp.CaseBarcodeInner = ""
                 NewSupp.BoxCode = ""
+                '25/01/2016     Added the TableDataID code for the new Pkey. 
+                NewSupp.TableDataId = ShortSku + "_" + NewSupp.Name
                 Suppliers.Add(NewSupp)
             End If
         End Try
 
 
         'Locations
-        Dim NewLocs As Object = MySql.SelectData("SELECT * FROM whldata.sku_locations WHERE Sku='" + ShortSku + "';")
+        Dim NewLocs As Object = MySql.SelectData("SELECT * FROM whldata.sku_locations WHERE Sku='" + SKU + "';")
         Try
             Dim NewArr As ArrayList = NewLocs
             If NewArr.Count > 0 Then
@@ -774,15 +942,17 @@ Public Class WhlSKU
         Catch ex As Exception
             NewItem.InitMinimum = 0
         End Try
+
         Try
             If IsDBNull(Data(121)) Then NewItem.ListPriority = 0 Else NewItem.ListPriority = Convert.ToInt32(Data(121))
         Catch ex As Exception
             NewItem.ListPriority = 0
         End Try
+        '26/01/2016     Minor change to make listing enabled by default for when the database doesn't do that itself. 
         Try
-            If IsDBNull(Data(122)) Then NewItem.IsListed = False Else NewItem.IsListed = Convert.ToBoolean(Data(122))
+            If IsDBNull(Data(122)) Then NewItem.IsListed = True Else NewItem.IsListed = Convert.ToBoolean(Data(122))
         Catch ex As Exception
-            NewItem.InitStock = False
+            NewItem.InitStock = True
         End Try
 
         '18/01/2016     (Possibly temporary) Added fee recalc inline so it's fresh. See how badly it impacts loading speed. Yay timers. 
@@ -791,8 +961,9 @@ Public Class WhlSKU
         '               Time Without recalc on Dev PC:  2min 24.44sec   (144 sec)
         '               Recalc time difference: 105% slower.
         '               Ouch. 
+        '20/01/2016     Changed RecalculateCosts to RecalculatePrices so we get updated profit/margin/whatever figures. 
         Try
-            RecalculateCosts(ExtendedProperties.Envelope, Price.Retail)
+            RecalculatePrices(Price.Retail)
         Catch ex As Exception
 
         End Try
@@ -833,7 +1004,8 @@ Public Class WhlSKU
     Public Dates As New SKUDates
     'Public Events As New List(Of SKUEvents)        Redundant before it was even used. RIP. 
     Public Changelog As New List(Of SKUChangelog)
-    'And here we have some properties. 
+    '21/01/2016     Added the envelope object because it's an absolute ballache having to parse it all the time. 
+    Public Envelope As Envelope
 End Class
 
 <System.Serializable()>

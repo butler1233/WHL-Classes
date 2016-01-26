@@ -90,12 +90,14 @@
       <SubType>Component</SubType>
     </Compile>
     <Compile Include="Employees.vb" />
+    <Compile Include="ErrorReporting.vb" />
     <Compile Include="Exceptions.vb" />
     <Compile Include="Fees.vb" />
     <Compile Include="Labels.vb" />
     <Compile Include="Misc.vb" />
     <Compile Include="Mysql.vb" />
     <Compile Include="Prepack.vb" />
+    <Compile Include="UsefulEnums.vb" />
     <Compile Include="whlnew.vb" />
     <Compile Include="My Project\AssemblyInfo.vb" />
     <Compile Include="My Project\Application.Designer.vb">

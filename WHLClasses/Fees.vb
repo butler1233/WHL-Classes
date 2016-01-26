@@ -64,17 +64,19 @@
             Else
                 If Not Weight > Convert.ToInt32(MySql.SelectData("SELECT value FROM whldata.feesandsurcharges WHERE `desc`='MaxPacketWeight';")(0)(0)) Then
                     'Do the actual calculation. 
-                    If Weight > Convert.ToInt32(MySql.SelectData("SELECT value FROM whldata.feesandsurcharges WHERE `desc`='MaxLetterWeight';")(0)(0)) Then
-                        If Packet Then
-                            'Packet
-                            Return Convert.ToSingle(MySql.SelectData("SELECT Cost FROM whldata.postagecosts WHERE Weight > " + Weight.ToString + " AND Type='Packet' ORDER BY Weight ASC LIMIT 1")(0)(0))
-                        Else
-                            'Letter - upgrade required
-                            Throw New FeeExceptions.UpgradeToPacketException
-                        End If
+                    '20/01/2016     Reworked this whole section because it seems broken for packets. 
+                    If Packet Then
+                        'Get the Packet size. 
+                        Return Convert.ToSingle(MySql.SelectData("SELECT Cost FROM whldata.postagecosts WHERE Weight > " + Weight.ToString + " AND Type='Packet' ORDER BY Weight ASC LIMIT 1")(0)(0))
                     Else
-                        'Letter
-                        Return Convert.ToSingle(MySql.SelectData("SELECT Cost FROM whldata.postagecosts WHERE Weight > " + Weight.ToString + " AND Type='Letter' ORDER BY Weight ASC LIMIT 1")(0)(0))
+                        'Check if it's too heavy for a letter
+                        If Weight > Convert.ToInt32(MySql.SelectData("SELECT value FROM whldata.feesandsurcharges WHERE `desc`='MaxLetterWeight';")(0)(0)) Then
+                            'It's too heavy to be a letter. 
+                            Throw New FeeExceptions.UpgradeToPacketException
+                        Else
+                            'It's okay as a letter, get the letter price. 
+                            Return Convert.ToSingle(MySql.SelectData("SELECT Cost FROM whldata.postagecosts WHERE Weight > " + Weight.ToString + " AND Type='Letter' ORDER BY Weight ASC LIMIT 1")(0)(0))
+                        End If
                     End If
                 Else
                     Throw New FeeExceptions.TooHeavyForPostException
@@ -117,7 +119,7 @@
         ''' <returns></returns>
         Public Function GetVATCost(RetailPrice As Single) As Single
             Dim vatrate As Single = 1 + Convert.ToSingle(MySql.SelectData("SELECT value FROM whldata.feesandsurcharges WHERE `desc`='VATRate';")(0)(0))
-            Return vatrate / RetailPrice
+            Return RetailPrice - (RetailPrice / vatrate)
         End Function
 
         '18/01/2016     This function takes the retail price and uses to work out the ebay+paypal and whatever fees. Call it listing fees, I dunno. 
@@ -131,6 +133,8 @@
             Dim surcharge As Single = Convert.ToSingle(MySql.SelectData("SELECT value FROM whldata.feesandsurcharges WHERE `desc`='TotalSurcharge';")(0)(0))
             Return feerate * RetailPrice + surcharge
         End Function
+
+
     End Class
 End Namespace
 

@@ -28,17 +28,39 @@ Public Class EnvelopeCollection
 
     Public Function GetEnvelope(Search As String, Optional NullIt As Boolean = False) As Envelope
         Search = Search.Replace("  ", " ")
+        If NullIt And Search.StartsWith("x") Then
+            Return Nothing
+        End If
         For Each env As Envelope In Me
 
-            If env.Name.Contains(Search) And ((Not NullIt = True) And (Not env.Code = "x")) Then
+            If env.Name.Contains(Search) And (Not env.Code = "x") Then
                 Return env
             End If
         Next
-        Return Nothing
+        '20/01/2016     Added an exception so we don't just crash and burn on each item. 
+        Throw New Exceptions.NoEnvelopeException("No envelope matching the string '" + Search + "' could be found.")
     End Function
 
 End Class
 
+Namespace MiscFunctions
+    Public Module GS1Barcode
+        Public Function GetAGS1() As String
+            Dim GS1l As ArrayList = MySql.SelectData("SELECT gs1 FROM whldata.gs1list ORDER BY gs1 ASC LIMIT 1")
+            Dim GS1 As String = ""
+            If GS1l.Count = 0 Then
+                Throw New Exceptions.NoGS1Exception("There are no GS1s left.")
+            Else
+                GS1 = GS1l(0)(0).ToString
+                MySql.insertupdate("DELETE FROM `whldata`.`gs1list` WHERE `gs1`='" + GS1 + "';")
+                Return GS1
+            End If
+        End Function
+    End Module
+
+End Namespace
+
+<System.Serializable()>
 Public Class Envelope
     Public Code As String
     Public Name As String
